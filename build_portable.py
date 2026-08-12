@@ -37,6 +37,9 @@ def build_and_package():
         "--name", APP_NAME,
         "--collect-all", "customtkinter",
         "--collect-all", "mutagen",
+        "--collect-all", "pygame",
+        "--collect-all", "PIL",
+        "--collect-all", "psutil",
         os.path.join(BASE_DIR, "app_gui.py")
     ]
 

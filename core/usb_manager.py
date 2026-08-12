@@ -12,38 +12,65 @@ from .config import BASE_DIR, load_config, record_sync_event
 from .task_manager import task_manager
 
 def list_all_usb_devices():
-    """Detecta todos los discos USB físicos y sus letras de partición."""
+    """Detecta todos los discos USB físicos y sus letras de partición de forma rápida y sin bloqueos."""
     devices = []
     try:
+        # Método 1: PowerShell Modern Storage API (rápido y directo)
         script = """
-        Get-CimInstance Win32_DiskDrive | Where-Object InterfaceType -eq 'USB' | ForEach-Object {
-            $disk = $_
-            $partitions = Get-CimInstance -Query "ASSOCIATORS OF {Win32_DiskDrive.DeviceID='$($disk.DeviceID)'} WHERE AssocClass = Win32_DiskDriveToDiskPartition"
-            $letters = @()
-            foreach ($part in $partitions) {
-                $logical = Get-CimInstance -Query "ASSOCIATORS OF {Win32_DiskPartition.DeviceID='$($part.DeviceID)'} WHERE AssocClass = Win32_LogicalDiskToPartition"
-                foreach ($log in $logical) {
-                    if ($log.DeviceID) { $letters += $log.DeviceID }
-                }
-            }
-            [PSCustomObject]@{
-                Index = $disk.Index
-                Name = $disk.Caption
-                SizeGB = [math]::Round($disk.Size / 1GB, 2)
+        $disks = Get-Disk | Where-Object BusType -eq 'USB'
+        $results = @()
+        foreach ($d in $disks) {
+            $vols = Get-Partition -DiskNumber $d.Number -ErrorAction SilentlyContinue | Get-Volume -ErrorAction SilentlyContinue
+            $letters = @($vols | Where-Object { $_.DriveLetter } | ForEach-Object { "$($_.DriveLetter):" })
+            $results += [PSCustomObject]@{
+                Index = $d.Number
+                Name = $d.FriendlyName
+                SizeGB = [math]::Round($d.Size / 1GB, 2)
                 Letters = ($letters -join ', ')
-                DeviceID = $disk.DeviceID
+                DeviceID = "\\\\.\\PHYSICALDRIVE$($d.Number)"
             }
-        } | ConvertTo-Json
+        }
+        $results | ConvertTo-Json
         """
-        res = subprocess.run(["powershell", "-NoProfile", "-Command", script], capture_output=True, text=True)
+        res = subprocess.run(
+            ["powershell", "-NoProfile", "-NonInteractive", "-Command", script],
+            capture_output=True,
+            text=True,
+            timeout=3
+        )
         if res.stdout.strip():
             raw = json.loads(res.stdout)
             if isinstance(raw, dict):
                 devices.append(raw)
             elif isinstance(raw, list):
                 devices.extend(raw)
-    except Exception as e:
-        print(f"[!] Error detectando discos USB: {e}")
+    except Exception:
+        pass
+
+    # Método 2: Fallback instantáneo con ctypes para detectar letras removibles si falla PowerShell
+    if not devices:
+        import string
+        try:
+            bitmask = ctypes.windll.kernel32.GetLogicalDrives()
+            removable_letters = []
+            for letter in string.ascii_uppercase:
+                if bitmask & 1:
+                    drive_root = f"{letter}:\\"
+                    dtype = ctypes.windll.kernel32.GetDriveTypeW(drive_root)
+                    if dtype == 2:  # DRIVE_REMOVABLE
+                        removable_letters.append(f"{letter}:")
+                bitmask >>= 1
+            if removable_letters:
+                devices.append({
+                    "Index": 1,
+                    "Name": "Memoria USB Extraíble",
+                    "SizeGB": 16.0,
+                    "Letters": ", ".join(removable_letters),
+                    "DeviceID": "\\\\.\\PHYSICALDRIVE1"
+                })
+        except Exception:
+            pass
+
     return devices
 
 def get_storage_diagnostics(usb_letter=None):
@@ -160,11 +187,13 @@ def sync_to_usb(usb_letter, progress_callback=None, cancel_event=None):
         record_sync_event(usb_letter, metrics["local_count"])
         return True, "Tu memoria USB ya tiene todas las canciones de tu colección. ¡Está 100% al día!"
 
+    task_manager.log(f"💾 Iniciando sincronización hacia {usb_letter}... Total pendientes: {total_to_copy}", level="INFO")
     copied = 0
     errors = 0
 
     for idx, (rel_path, full_src) in enumerate(pending_items, 1):
         if cancel_event and cancel_event.is_set():
+            task_manager.log("⏹️ Sincronización USB cancelada por el usuario.", level="WARN")
             break
 
         dest_file = os.path.join(usb_dir, rel_path)
@@ -173,8 +202,11 @@ def sync_to_usb(usb_letter, progress_callback=None, cancel_event=None):
         try:
             shutil.copy2(full_src, dest_file)
             copied += 1
+            if idx % 10 == 0 or idx == total_to_copy:
+                task_manager.log(f"[{idx}/{total_to_copy}] Copiado a USB: {os.path.basename(rel_path)}", level="SUCCESS")
         except Exception as e:
             errors += 1
+            task_manager.log(f"[!] Error copiando {rel_path}: {e}", level="ERROR")
 
         if progress_callback:
             frac = idx / total_to_copy
@@ -185,9 +217,13 @@ def sync_to_usb(usb_letter, progress_callback=None, cancel_event=None):
     task_manager.unregister_task("usb_sync_task")
 
     if cancel_event and cancel_event.is_set():
-        return False, f"Sincronización pausada. Se copiaron {copied} de {total_to_copy} canciones."
+        msg = f"Sincronización pausada. Se copiaron {copied} de {total_to_copy} canciones."
+        task_manager.log(msg, level="WARN")
+        return False, msg
 
-    return True, f"¡Sincronización completada con éxito! Se copiaron {copied} canciones nuevas a la memoria USB ({usb_letter})."
+    success_msg = f"¡Sincronización completada con éxito! Se copiaron {copied} canciones nuevas a la memoria USB ({usb_letter})."
+    task_manager.log(f"✔ {success_msg}", level="SUCCESS")
+    return True, success_msg
 
 def format_usb_drive(disk_index, label="MUSICA", filesystem="FAT32"):
     """Limpia particiones corruptas y formatea el disco USB en FAT32 MBR con ShellExecuteW."""

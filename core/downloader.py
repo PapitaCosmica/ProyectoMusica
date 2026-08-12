@@ -150,20 +150,27 @@ def download_playlists(progress_callback=None, cancel_event=None):
             process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding='utf-8', errors='replace')
             for line in process.stdout:
                 line = line.strip()
-                if line and progress_callback:
+                if line:
                     if "Sign in to confirm" in line:
-                        progress_callback("[!] YouTube solicitó verificación. Renovando cookies podría ayudar...")
+                        msg = "[!] YouTube solicitó verificación. Renovando cookies podría ayudar..."
+                        task_manager.log(msg, level="WARN")
+                        if progress_callback: progress_callback(msg)
                     elif "WARNING" in line and "SABR" in line:
                         continue  # Suprimir warnings SABR que no afectan la descarga
                     else:
-                        progress_callback(line)
+                        lvl = "DOWNLOAD" if "[download]" in line else "INFO"
+                        task_manager.log(line, level=lvl)
+                        if progress_callback: progress_callback(line)
                 if cancel_event and cancel_event.is_set():
                     process.terminate()
+                    task_manager.log("⏹️ Descarga cancelada por el usuario.", level="WARN")
                     break
             process.wait()
         except Exception as e:
+            err_msg = f"[!] Error en yt-dlp: {e}"
+            task_manager.log(err_msg, level="ERROR")
             if progress_callback:
-                progress_callback(f"[!] Error en yt-dlp: {e}")
+                progress_callback(err_msg)
 
     task_manager.unregister_task("download_task")
     # Consolidar y desduplicar automáticamente al terminar

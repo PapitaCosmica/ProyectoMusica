@@ -10,6 +10,7 @@ from player.audio_engine import audio_player
 from player.playlist_queue import playlist_queue
 
 from .components.player_bar import PlayerBar
+from .components.live_log_window import LiveLogWindow
 from .components.tab_library import TabLibrary
 from .components.tab_sync import TabSync
 from .components.tab_usb import TabUsb
@@ -67,6 +68,21 @@ class MainWindow(ctk.CTk):
         stats_box = ctk.CTkFrame(self.header_frame, fg_color="transparent")
         stats_box.pack(side="right", padx=16, pady=8)
 
+        self.log_window = None
+
+        # Botón para abrir la Ventana de Logs en Tiempo Real
+        self.btn_open_logs = ctk.CTkButton(
+            stats_box,
+            text="📋 Logs",
+            width=70,
+            height=28,
+            font=ctk.CTkFont(size=11, weight="bold"),
+            fg_color="#27272a",
+            hover_color="#3f3f46",
+            command=self.open_live_logs
+        )
+        self.btn_open_logs.pack(side="right", padx=(6, 0))
+
         # Interruptor para Encender / Apagar el Reproductor
         self.switch_player = ctk.CTkSwitch(
             stats_box,
@@ -79,7 +95,7 @@ class MainWindow(ctk.CTk):
             self.switch_player.select()
         else:
             self.switch_player.deselect()
-        self.switch_player.pack(side="right", padx=(10, 0))
+        self.switch_player.pack(side="right", padx=(8, 0))
 
         self.badge_status = ctk.CTkLabel(
             stats_box,
@@ -158,6 +174,14 @@ class MainWindow(ctk.CTk):
         if self.player_enabled:
             audio_player.init_audio_system()
             self.player_bar.pack(fill="x", padx=14, pady=(0, 10))
+
+    def open_live_logs(self):
+        """Abre o trae al frente la ventana de logs en tiempo real."""
+        if self.log_window is None or not self.log_window.winfo_exists():
+            self.log_window = LiveLogWindow(self)
+        else:
+            self.log_window.lift()
+            self.log_window.focus()
 
     def toggle_player_switch(self):
         self.player_enabled = bool(self.switch_player.get())
