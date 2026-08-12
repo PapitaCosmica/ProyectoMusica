@@ -1,46 +1,41 @@
 # -*- coding: utf-8 -*-
-"""Menú de Selección de Herramientas y Lanzador Inicial (Launcher Hub)."""
+"""Vista / Frame de Selección de Herramientas y Lanzador Inicial (Launcher Hub)."""
 
-import os
 import customtkinter as ctk
 from core.config import load_config, save_config
 
-class LauncherHub(ctk.CTk):
-    def __init__(self, on_select_mode_callback):
-        super().__init__()
+class LauncherHub(ctk.CTkFrame):
+    def __init__(self, master, on_select_mode_callback, **kwargs):
+        super().__init__(master, fg_color="transparent", **kwargs)
         self.on_select_mode = on_select_mode_callback
-
-        self.title("🚀 MusicSync Studio - Selector de Herramientas")
-        self.geometry("640x520")
-        self.resizable(False, False)
-
-        ctk.set_appearance_mode("Dark")
-        ctk.set_default_color_theme("green")
-
         self.setup_ui()
 
     def setup_ui(self):
+        # Contenedor Centrado
+        center_box = ctk.CTkFrame(self, fg_color="#18181b", corner_radius=14, width=640)
+        center_box.pack(expand=True, padx=20, pady=20)
+
         # Cabecera
-        header = ctk.CTkFrame(self, fg_color="#18181b", corner_radius=12)
-        header.pack(fill="x", padx=16, pady=(16, 12))
+        header = ctk.CTkFrame(center_box, fg_color="transparent")
+        header.pack(fill="x", padx=20, pady=(20, 10))
 
         ctk.CTkLabel(
             header,
             text="🚀 MusicSync Studio Launcher",
-            font=ctk.CTkFont(size=22, weight="bold"),
+            font=ctk.CTkFont(size=24, weight="bold"),
             text_color="#10b981"
-        ).pack(anchor="w", padx=16, pady=(12, 2))
+        ).pack(anchor="w", pady=(0, 4))
 
         ctk.CTkLabel(
             header,
             text="Selecciona la herramienta o modo de trabajo optimizado para hoy:",
-            font=ctk.CTkFont(size=12),
+            font=ctk.CTkFont(size=13),
             text_color="#a1a1aa"
-        ).pack(anchor="w", padx=16, pady=(0, 12))
+        ).pack(anchor="w")
 
         # Tarjetas de Opciones
-        cards_box = ctk.CTkFrame(self, fg_color="transparent")
-        cards_box.pack(fill="both", expand=True, padx=16, pady=4)
+        cards_box = ctk.CTkFrame(center_box, fg_color="transparent")
+        cards_box.pack(fill="both", expand=True, padx=20, pady=8)
 
         # Opción 1: Modo Rápido / Ultra Ligero (Recomendado)
         card_quick = ctk.CTkFrame(cards_box, fg_color="#1e1e24", corner_radius=10)
@@ -52,17 +47,17 @@ class LauncherHub(ctk.CTk):
             font=ctk.CTkFont(size=14, weight="bold"),
             fg_color="#10b981",
             hover_color="#059669",
-            height=44,
+            height=46,
             command=lambda: self.select_mode("sync_usb")
         )
-        btn_quick.pack(fill="x", padx=12, pady=(10, 4))
+        btn_quick.pack(fill="x", padx=14, pady=(12, 4))
 
         ctk.CTkLabel(
             card_quick,
             text="Ideal para sincronizar a tu USB o descargar sin sobrecargar la memoria ni el CPU.",
             font=ctk.CTkFont(size=11),
             text_color="#a1a1aa"
-        ).pack(anchor="w", padx=14, pady=(0, 10))
+        ).pack(anchor="w", padx=16, pady=(0, 12))
 
         # Opción 2: Modo Completo Studio Pro
         card_full = ctk.CTkFrame(cards_box, fg_color="#1e1e24", corner_radius=10)
@@ -74,17 +69,17 @@ class LauncherHub(ctk.CTk):
             font=ctk.CTkFont(size=14, weight="bold"),
             fg_color="#6366f1",
             hover_color="#4f46e5",
-            height=44,
+            height=46,
             command=lambda: self.select_mode("full")
         )
-        btn_full.pack(fill="x", padx=12, pady=(10, 4))
+        btn_full.pack(fill="x", padx=14, pady=(12, 4))
 
         ctk.CTkLabel(
             card_full,
             text="Incluye explorador local, barra estilo Spotify y enrutador de audio para Voicemeeter / Bluetooth / HDMI.",
             font=ctk.CTkFont(size=11),
             text_color="#a1a1aa"
-        ).pack(anchor="w", padx=14, pady=(0, 10))
+        ).pack(anchor="w", padx=16, pady=(0, 12))
 
         # Opción 3: Formateador Directo de USB
         card_usb = ctk.CTkFrame(cards_box, fg_color="#1e1e24", corner_radius=10)
@@ -96,25 +91,25 @@ class LauncherHub(ctk.CTk):
             font=ctk.CTkFont(size=13, weight="bold"),
             fg_color="#3f3f46",
             hover_color="#52525b",
-            height=38,
+            height=40,
             command=lambda: self.select_mode("usb_only")
         )
-        btn_usb.pack(fill="x", padx=12, pady=(8, 4))
+        btn_usb.pack(fill="x", padx=14, pady=(10, 4))
 
         ctk.CTkLabel(
             card_usb,
             text="Limpia particiones corruptas y prepara la USB en formato FAT32 universal para autos.",
             font=ctk.CTkFont(size=11),
             text_color="#a1a1aa"
-        ).pack(anchor="w", padx=14, pady=(0, 8))
+        ).pack(anchor="w", padx=16, pady=(0, 10))
 
         # Footer con Checkbox para Recordar
-        footer = ctk.CTkFrame(self, fg_color="transparent")
-        footer.pack(fill="x", padx=16, pady=(8, 14))
+        footer = ctk.CTkFrame(center_box, fg_color="transparent")
+        footer.pack(fill="x", padx=20, pady=(8, 20))
 
         self.chk_remember = ctk.CTkCheckBox(
             footer,
-            text="Recordar mi elección y abrir siempre en el modo seleccionado",
+            text="Recordar mi elección y abrir directamente este modo en el futuro",
             font=ctk.CTkFont(size=11),
             text_color="#d4d4d8"
         )
@@ -127,5 +122,5 @@ class LauncherHub(ctk.CTk):
         config["default_launch_mode"] = mode
         save_config(config)
 
-        self.destroy()
-        self.on_select_mode(mode)
+        if self.on_select_mode:
+            self.on_select_mode(mode)

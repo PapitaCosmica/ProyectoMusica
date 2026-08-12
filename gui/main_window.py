@@ -1,7 +1,8 @@
 # -*- coding: utf-8 -*-
-"""Ventana Principal de MusicSync Studio Pro (Optimizada con Reproductor On-Demand y Modos)."""
+"""Ventana Principal de MusicSync Studio Pro (Optimizada con Hub Integrado, Reproductor On-Demand y Cierre Seguro)."""
 
 import os
+import sys
 import threading
 import customtkinter as ctk
 from core.config import BASE_DIR, load_config, save_config
@@ -9,6 +10,7 @@ from core.task_manager import task_manager
 from player.audio_engine import audio_player
 from player.playlist_queue import playlist_queue
 
+from .launcher_hub import LauncherHub
 from .components.player_bar import PlayerBar
 from .components.live_log_window import LiveLogWindow
 from .components.tab_library import TabLibrary
@@ -22,19 +24,24 @@ ctk.set_appearance_mode("Dark")
 ctk.set_default_color_theme("green")
 
 class MainWindow(ctk.CTk):
-    def __init__(self, mode="full"):
+    def __init__(self, mode="hub"):
         super().__init__()
         self.mode = mode
         self.cached_song_count = 0
         self.is_scanning_count = False
+        self.hub_frame = None
+        self.tabview = None
+        self.log_window = None
 
         config = load_config()
         self.player_enabled = config.get("player_enabled", False)
 
-        title_suffix = " (Modo Ultra Ligero)" if mode == "sync_usb" else ""
-        self.title(f"🎵 MusicSync Studio Pro{title_suffix}")
-        self.geometry("1040x780")
-        self.minsize(920, 600)
+        self.title("🎵 MusicSync Studio Pro")
+        self.geometry("1060x800")
+        self.minsize(920, 620)
+
+        # Manejador de cierre seguro
+        self.protocol("WM_DELETE_WINDOW", self.on_app_close)
 
         self.setup_ui()
         self.async_update_song_count()
@@ -68,7 +75,18 @@ class MainWindow(ctk.CTk):
         stats_box = ctk.CTkFrame(self.header_frame, fg_color="transparent")
         stats_box.pack(side="right", padx=16, pady=8)
 
-        self.log_window = None
+        # Botón para cambiar / volver al Hub de Herramientas
+        self.btn_hub = ctk.CTkButton(
+            stats_box,
+            text="🚀 Menú",
+            width=70,
+            height=28,
+            font=ctk.CTkFont(size=11, weight="bold"),
+            fg_color="#27272a",
+            hover_color="#3f3f46",
+            command=self.show_hub_view
+        )
+        self.btn_hub.pack(side="right", padx=(6, 0))
 
         # Botón para abrir la Ventana de Logs en Tiempo Real
         self.btn_open_logs = ctk.CTkButton(
@@ -117,11 +135,49 @@ class MainWindow(ctk.CTk):
         )
         self.lbl_song_count.pack(side="right", padx=10)
 
-        # 2. Pestañas Principales
-        self.tabview = ctk.CTkTabview(self, corner_radius=12, fg_color="#18181b")
-        self.tabview.pack(fill="both", expand=True, padx=14, pady=(0, 6))
+        # 2. Contenedor Central Dinámico
+        self.main_container = ctk.CTkFrame(self, fg_color="transparent")
+        self.main_container.pack(fill="both", expand=True, padx=14, pady=(0, 6))
 
-        if self.mode == "full":
+        # 3. Barra de Reproducción Inferior Persistente (Solo si está encendido)
+        self.player_bar = PlayerBar(self, on_track_change_callback=self.on_player_track_change)
+
+        if self.mode == "hub":
+            self.show_hub_view()
+        else:
+            self.build_mode_view(self.mode)
+
+        if self.player_enabled:
+            audio_player.init_audio_system()
+            self.player_bar.pack(fill="x", padx=14, pady=(0, 10))
+
+    def show_hub_view(self):
+        """Muestra el Launcher Hub dentro de la ventana."""
+        if self.tabview:
+            self.tabview.pack_forget()
+        if self.hub_frame is None:
+            self.hub_frame = LauncherHub(self.main_container, on_select_mode_callback=self.switch_mode)
+        self.hub_frame.pack(fill="both", expand=True)
+        self.title("🚀 MusicSync Studio Pro - Selector de Herramientas")
+
+    def switch_mode(self, mode):
+        """Cambia dinámicamente de modo sin reiniciar la ventana."""
+        self.mode = mode
+        if self.hub_frame:
+            self.hub_frame.pack_forget()
+        self.build_mode_view(mode)
+
+    def build_mode_view(self, mode):
+        if self.tabview:
+            self.tabview.destroy()
+
+        title_suffix = " (Modo Ultra Ligero)" if mode in ["sync_usb", "usb_only"] else ""
+        self.title(f"🎵 MusicSync Studio Pro{title_suffix}")
+
+        self.tabview = ctk.CTkTabview(self.main_container, corner_radius=12, fg_color="#18181b")
+        self.tabview.pack(fill="both", expand=True)
+
+        if mode == "full":
             self.t_library = self.tabview.add("🎵 Biblioteca Local")
             self.t_sync = self.tabview.add("🎛️ Centro de Control")
             self.t_usb = self.tabview.add("💾 Memoria USB")
@@ -146,8 +202,17 @@ class MainWindow(ctk.CTk):
 
             self.comp_settings = TabSettings(self.t_settings, on_reorganize_finished=self.on_data_updated)
             self.comp_settings.pack(fill="both", expand=True)
+        elif mode == "usb_only":
+            self.t_usb = self.tabview.add("💾 Memoria USB & Formateo")
+            self.t_diagnostics = self.tabview.add("📊 Diagnóstico de Almacenamiento")
+
+            self.comp_usb = TabUsb(self.t_usb, on_usb_action_finished=self.on_data_updated)
+            self.comp_usb.pack(fill="both", expand=True)
+
+            self.comp_diagnostics = TabDiagnostics(self.t_diagnostics)
+            self.comp_diagnostics.pack(fill="both", expand=True)
         else:
-            # Modo Ligero (Solo Sync, USB y Diagnóstico)
+            # Modo Rápido / Ultra Ligero (Sync, USB, Diagnósticos, Playlists, Ajustes)
             self.t_sync = self.tabview.add("🎛️ Centro de Control")
             self.t_usb = self.tabview.add("💾 Memoria USB")
             self.t_diagnostics = self.tabview.add("📊 Diagnóstico & Almacenamiento")
@@ -168,12 +233,6 @@ class MainWindow(ctk.CTk):
 
             self.comp_settings = TabSettings(self.t_settings, on_reorganize_finished=self.on_data_updated)
             self.comp_settings.pack(fill="both", expand=True)
-
-        # 3. Barra de Reproducción Inferior Persistente (Solo si está encendido)
-        self.player_bar = PlayerBar(self, on_track_change_callback=self.on_player_track_change)
-        if self.player_enabled:
-            audio_player.init_audio_system()
-            self.player_bar.pack(fill="x", padx=14, pady=(0, 10))
 
     def open_live_logs(self):
         """Abre o trae al frente la ventana de logs en tiempo real."""
@@ -211,7 +270,8 @@ class MainWindow(ctk.CTk):
         self.async_update_song_count()
         if hasattr(self, 'comp_library'):
             self.comp_library.async_refresh_library(force=True)
-        self.comp_diagnostics.async_refresh_diagnostics()
+        if hasattr(self, 'comp_diagnostics'):
+            self.comp_diagnostics.async_refresh_diagnostics()
 
     def async_update_song_count(self):
         if self.is_scanning_count:
@@ -239,7 +299,6 @@ class MainWindow(ctk.CTk):
         threading.Thread(target=worker, daemon=True).start()
 
     def start_header_loop(self):
-        # Actualización de insignias de tareas (100% en memoria, cero I/O de disco)
         summary, num = task_manager.get_active_tasks_summary()
         if num > 0:
             self.badge_status.configure(text=f"🔄 {num} TAREA(S): {summary[:25].upper()}", text_color="#f59e0b", fg_color="#3f2d12")
@@ -247,3 +306,16 @@ class MainWindow(ctk.CTk):
             self.badge_status.configure(text="🟢 LISTO / INACTIVO", text_color="#10b981", fg_color="#27272a")
 
         self.after(2000, self.start_header_loop)
+
+    def on_app_close(self):
+        """Cierre ordenado y limpio de la aplicación."""
+        try:
+            audio_player.stop()
+            audio_player.unload_audio_system()
+        except Exception:
+            pass
+        try:
+            self.destroy()
+        except Exception:
+            pass
+        os._exit(0)

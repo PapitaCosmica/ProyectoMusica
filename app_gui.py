@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
-Punto de entrada principal para MusicSync Studio.
-Muestra el menú de selección de herramientas (Launcher Hub) o inicia el modo configurado.
+Punto de entrada principal para MusicSync Studio Pro.
+Inicia la ventana principal directamente con el modo configurado o el Hub inicial.
 """
 
 import sys
@@ -12,35 +12,27 @@ if BASE_DIR not in sys.path:
     sys.path.insert(0, BASE_DIR)
 
 from core.config import load_config
-from gui.launcher_hub import LauncherHub
 from gui.main_window import MainWindow
-
-def launch_main_window(mode="full"):
-    app = MainWindow(mode=mode)
-    app.mainloop()
 
 def main():
     config = load_config()
 
-    # Checar argumentos de línea de comandos
+    # Prioridad 1: Argumentos explícitos por CLI
     if "--full" in sys.argv:
-        launch_main_window("full")
-        return
+        mode = "full"
     elif "--quick" in sys.argv or "--sync" in sys.argv:
-        launch_main_window("sync_usb")
-        return
+        mode = "sync_usb"
     elif "--usb" in sys.argv:
-        launch_main_window("usb_only")
-        return
-
-    remember = config.get("remember_launch_mode", False)
-    default_mode = config.get("default_launch_mode", "hub")
-
-    if remember and default_mode != "hub" and "--hub" not in sys.argv:
-        launch_main_window(default_mode)
+        mode = "usb_only"
+    elif "--hub" in sys.argv:
+        mode = "hub"
     else:
-        hub = LauncherHub(on_select_mode_callback=launch_main_window)
-        hub.mainloop()
+        remember = config.get("remember_launch_mode", False)
+        default_mode = config.get("default_launch_mode", "hub")
+        mode = default_mode if (remember and default_mode) else "hub"
+
+    app = MainWindow(mode=mode)
+    app.mainloop()
 
 if __name__ == '__main__':
     main()
