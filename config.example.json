@@ -1,0 +1,23 @@
+{
+  "playlists": [
+    {
+      "name": "Mi Playlist",
+      "url": "https://youtube.com/playlist?list=YOUR_PLAYLIST_ID",
+      "active": true
+    }
+  ],
+  "target_folder": "Musica",
+  "organization_structure": "flat",
+  "audio_format": "mp3",
+  "audio_quality": "320K",
+  "id3_version": "v2.3",
+  "clean_names": true,
+  "remove_old_empty_folders": true,
+  "historial_file": "historial.txt",
+  "cookies_file": "cookies_netscape.txt",
+  "browser_cookies": "none",
+  "usb_target_folder": "Musica",
+  "player_enabled": false,
+  "remember_launch_mode": false,
+  "default_launch_mode": "hub"
+}

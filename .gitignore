@@ -1,0 +1,58 @@
+# ============================================
+# MusicSync Studio Pro - .gitignore
+# ============================================
+
+# ---- Datos Sensibles ----
+cookies_netscape.txt
+cookies.txt
+*.youtube.com*.json
+youtube_cookies*.json
+
+# ---- Colección de Música (archivos pesados) ----
+Musica/
+*.mp3
+*.m4a
+*.flac
+*.wav
+*.ogg
+
+# ---- Distribución y Build ----
+dist/
+build/
+*.spec
+*.exe
+*.zip
+
+# ---- Python Cache ----
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyo
+
+# ---- Entorno Virtual ----
+venv/
+.venv/
+env/
+
+# ---- IDE ----
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# ---- OS ----
+Thumbs.db
+Desktop.ini
+.DS_Store
+
+# ---- Archivos Temporales del Proyecto ----
+.diskpart_cmd.txt
+.test_dp.txt
+.usb_format_done.txt
+
+# ---- Historial de Descargas (regenerable) ----
+historial.txt
+
+# ---- Config con datos personales (usar config.example.json como plantilla) ----
+config.json
