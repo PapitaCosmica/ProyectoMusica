@@ -5,6 +5,7 @@ import sys
 import os
 import json
 import time
+import subprocess
 
 if getattr(sys, 'frozen', False):
     BASE_DIR = os.path.dirname(sys.executable)
@@ -35,7 +36,7 @@ def get_default_config():
         "remove_old_empty_folders": True,
         "historial_file": "historial.txt",
         "cookies_file": "cookies_netscape.txt",
-        "browser_cookies": "edge",            # "edge", "chrome", "firefox", "none"
+        "browser_cookies": "none",            # "none", "edge", "chrome", "firefox"
         "last_sync_timestamp": None,
         "last_sync_target": None,
         "preferred_audio_device": None,
@@ -73,6 +74,49 @@ def save_config(config_dict):
         return True
     except Exception as e:
         print(f"[!] Error guardando config.json: {e}")
+        return False
+
+def get_historial_path():
+    cfg = load_config()
+    hf = cfg.get("historial_file", "historial.txt")
+    return hf if os.path.isabs(hf) else os.path.join(BASE_DIR, hf)
+
+def get_cookies_path():
+    cfg = load_config()
+    cf = cfg.get("cookies_file", "cookies_netscape.txt")
+    return cf if os.path.isabs(cf) else os.path.join(BASE_DIR, cf)
+
+def get_historial_count():
+    path = get_historial_path()
+    if os.path.exists(path):
+        try:
+            with open(path, "r", encoding="utf-8", errors="ignore") as f:
+                return sum(1 for line in f if line.strip())
+        except Exception:
+            pass
+    return 0
+
+def open_path_in_explorer(path):
+    """Abre una carpeta o selecciona un archivo en el Explorador de Windows."""
+    if not path or not os.path.exists(path):
+        return False
+    try:
+        if os.path.isdir(path):
+            os.startfile(path)
+        else:
+            subprocess.run(["explorer.exe", f"/select,{os.path.normpath(path)}"])
+        return True
+    except Exception:
+        return False
+
+def open_file_in_editor(path):
+    """Abre un archivo de texto en el editor predeterminado (Notepad o similar)."""
+    if not path or not os.path.exists(path):
+        return False
+    try:
+        os.startfile(path)
+        return True
+    except Exception:
         return False
 
 def record_sync_event(target_drive, tracks_count):

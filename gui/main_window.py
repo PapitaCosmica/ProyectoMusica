@@ -181,9 +181,9 @@ class MainWindow(ctk.CTk):
             self.t_library = self.tabview.add("🎵 Biblioteca Local")
             self.t_sync = self.tabview.add("🎛️ Centro de Control")
             self.t_usb = self.tabview.add("💾 Memoria USB")
-            self.t_diagnostics = self.tabview.add("📊 Diagnóstico & Almacenamiento")
+            self.t_diagnostics = self.tabview.add("🔍 Inspector & Duplicados")
             self.t_playlists = self.tabview.add("📋 Playlists & Fuentes")
-            self.t_settings = self.tabview.add("⚙️ Ajustes & Estructura")
+            self.t_settings = self.tabview.add("⚙️ Rutas & Configuración")
 
             self.comp_library = TabLibrary(self.t_library, on_play_track_callback=self.play_track_from_library)
             self.comp_library.pack(fill="both", expand=True)
@@ -204,7 +204,7 @@ class MainWindow(ctk.CTk):
             self.comp_settings.pack(fill="both", expand=True)
         elif mode == "usb_only":
             self.t_usb = self.tabview.add("💾 Memoria USB & Formateo")
-            self.t_diagnostics = self.tabview.add("📊 Diagnóstico de Almacenamiento")
+            self.t_diagnostics = self.tabview.add("🔍 Inspector de Almacenamiento")
 
             self.comp_usb = TabUsb(self.t_usb, on_usb_action_finished=self.on_data_updated)
             self.comp_usb.pack(fill="both", expand=True)
@@ -215,9 +215,9 @@ class MainWindow(ctk.CTk):
             # Modo Rápido / Ultra Ligero (Sync, USB, Diagnósticos, Playlists, Ajustes)
             self.t_sync = self.tabview.add("🎛️ Centro de Control")
             self.t_usb = self.tabview.add("💾 Memoria USB")
-            self.t_diagnostics = self.tabview.add("📊 Diagnóstico & Almacenamiento")
+            self.t_diagnostics = self.tabview.add("🔍 Inspector & Duplicados")
             self.t_playlists = self.tabview.add("📋 Playlists & Fuentes")
-            self.t_settings = self.tabview.add("⚙️ Ajustes & Estructura")
+            self.t_settings = self.tabview.add("⚙️ Rutas & Configuración")
 
             self.comp_sync = TabSync(self.t_sync, on_sync_finished=self.on_data_updated)
             self.comp_sync.pack(fill="both", expand=True)

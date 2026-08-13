@@ -1,12 +1,12 @@
 # -*- coding: utf-8 -*-
-"""Motor de Sincronización, Desduplicación y Organización de Música."""
+"""Motor de Sincronización, Desduplicación, Inspección de Colección y Organización de Música."""
 
 import os
 import re
 import shutil
 import hashlib
 from collections import defaultdict
-from .config import BASE_DIR, load_config
+from .config import BASE_DIR, load_config, get_historial_count, get_historial_path, get_cookies_path
 from .task_manager import task_manager
 
 def sanitize_filename(filename):
@@ -111,11 +111,14 @@ def get_audio_info(filepath):
 
     return {
         "path": filepath,
-        "title": title.strip(),
-        "artist": artist.strip(),
+        "filename": fname,
+        "title": title.strip() or raw_name,
+        "artist": artist.strip() or "Artista Desconocido",
         "album": album.strip() or "Varios",
         "bitrate": bitrate,
+        "bitrate_kbps": round(bitrate / 1000) if bitrate else 0,
         "size": size_bytes,
+        "size_mb": round(size_bytes / (1024 * 1024), 2),
         "raw_name": raw_name
     }
 
@@ -157,6 +160,151 @@ def build_destination_path(info, target_root, structure="flat"):
 
     os.makedirs(dest_dir, exist_ok=True)
     return os.path.join(dest_dir, filename)
+
+def inspect_collection_detailed(usb_letter=None, progress_callback=None):
+    """Realiza un análisis completo y estructurado de la colección local, USB, duplicados e historial."""
+    config = load_config()
+    src_dir = config.get("source_folder") or os.path.join(BASE_DIR, "Musica")
+    usb_subfolder = config.get("usb_target_folder", "Musica")
+    usb_dir = os.path.join(f"{usb_letter}\\", usb_subfolder) if (usb_letter and os.path.exists(f"{usb_letter}\\")) else None
+
+    report = {
+        "local_dir": src_dir,
+        "usb_dir": usb_dir,
+        "usb_letter": usb_letter,
+        "local_tracks": [],
+        "usb_tracks": [],
+        "duplicate_groups": [], # [{'name': ..., 'items': [info, ...]}]
+        "total_duplicates_count": 0,
+        "missing_on_usb": [],  # [info, ...]
+        "only_on_usb": [],     # [info, ...]
+        "synced_count": 0,
+        "total_local_size_gb": 0.0,
+        "total_usb_size_gb": 0.0,
+        "historial_count": get_historial_count(),
+        "historial_path": get_historial_path(),
+        "cookies_path": get_cookies_path()
+    }
+
+    # 1. Escanear Archivos Locales
+    local_files = []
+    if os.path.exists(src_dir):
+        for root, _, files in os.walk(src_dir):
+            for f in files:
+                if f.lower().endswith(".mp3"):
+                    local_files.append(os.path.join(root, f))
+
+    total_local_size = 0
+    local_items = []
+    for idx, p in enumerate(local_files, 1):
+        info = get_audio_info(p)
+        total_local_size += info["size"]
+        local_items.append(info)
+        if progress_callback and idx % 100 == 0:
+            progress_callback(f"Escaneando archivos locales: {idx}/{len(local_files)}")
+
+    report["local_tracks"] = local_items
+    report["total_local_size_gb"] = round(total_local_size / (1024**3), 2)
+
+    # 2. Detectar Duplicados Locales
+    grouped_local = defaultdict(list)
+    for item in local_items:
+        norm_art = normalize_for_comparison(item["artist"])
+        norm_tit = normalize_for_comparison(item["title"] or clean_music_title(item["raw_name"]))
+        key = (norm_art, norm_tit) if norm_art else ("", norm_tit)
+        grouped_local[key].append(item)
+
+    duplicate_groups = []
+    total_dups_count = 0
+    for key, items in grouped_local.items():
+        if len(items) > 1:
+            items_sorted = sorted(items, key=lambda x: (x["bitrate"], x["size"]), reverse=True)
+            display_name = f"{items_sorted[0]['artist']} - {items_sorted[0]['title']}"
+            duplicate_groups.append({
+                "key": key,
+                "name": display_name,
+                "best": items_sorted[0],
+                "duplicates": items_sorted[1:],
+                "total_count": len(items_sorted)
+            })
+            total_dups_count += (len(items_sorted) - 1)
+
+    report["duplicate_groups"] = duplicate_groups
+    report["total_duplicates_count"] = total_dups_count
+
+    # 3. Escanear Archivos USB y Comparar (si hay USB)
+    usb_items = []
+    usb_keys = set()
+    total_usb_size = 0
+
+    if usb_dir and os.path.exists(usb_dir):
+        usb_files = []
+        for root, _, files in os.walk(usb_dir):
+            for f in files:
+                if f.lower().endswith(".mp3"):
+                    usb_files.append(os.path.join(root, f))
+
+        for idx, p in enumerate(usb_files, 1):
+            info = get_audio_info(p)
+            total_usb_size += info["size"]
+            usb_items.append(info)
+            norm_art = normalize_for_comparison(info["artist"])
+            norm_tit = normalize_for_comparison(info["title"] or clean_music_title(info["raw_name"]))
+            usb_keys.add((norm_art, norm_tit) if norm_art else ("", norm_tit))
+            if progress_callback and idx % 100 == 0:
+                progress_callback(f"Escaneando archivos USB: {idx}/{len(usb_files)}")
+
+    report["usb_tracks"] = usb_items
+    report["total_usb_size_gb"] = round(total_usb_size / (1024**3), 2)
+
+    # 4. Comparar diferencias PC vs USB
+    local_keys_map = {}
+    for item in local_items:
+        norm_art = normalize_for_comparison(item["artist"])
+        norm_tit = normalize_for_comparison(item["title"] or clean_music_title(item["raw_name"]))
+        k = (norm_art, norm_tit) if norm_art else ("", norm_tit)
+        if k not in local_keys_map:
+            local_keys_map[k] = item
+
+    missing_on_usb = []
+    for k, item in local_keys_map.items():
+        if k not in usb_keys:
+            missing_on_usb.append(item)
+
+    only_on_usb = []
+    for item in usb_items:
+        norm_art = normalize_for_comparison(item["artist"])
+        norm_tit = normalize_for_comparison(item["title"] or clean_music_title(item["raw_name"]))
+        k = (norm_art, norm_tit) if norm_art else ("", norm_tit)
+        if k not in local_keys_map:
+            only_on_usb.append(item)
+
+    synced_count = len(local_keys_map) - len(missing_on_usb)
+    report["missing_on_usb"] = missing_on_usb
+    report["only_on_usb"] = only_on_usb
+    report["synced_count"] = max(0, synced_count)
+
+    return report
+
+def resolve_and_clean_duplicates(duplicate_groups, progress_callback=None):
+    """Elimina duplicados conservando siempre la pista de mayor calidad/bitrate."""
+    removed_count = 0
+    errors = 0
+    total = len(duplicate_groups)
+
+    for idx, group in enumerate(duplicate_groups, 1):
+        for dup in group.get("duplicates", []):
+            dup_path = dup.get("path")
+            if dup_path and os.path.exists(dup_path):
+                try:
+                    os.remove(dup_path)
+                    removed_count += 1
+                except Exception:
+                    errors += 1
+        if progress_callback:
+            progress_callback(idx, total, group.get("name", "Pista"))
+
+    return removed_count, errors
 
 def consolidate_and_deduplicate(dry_run=False, progress_callback=None):
     ok, conflict_msg = task_manager.register_task("sync_task", "SYNC", "Sincronizando y Desduplicando")
