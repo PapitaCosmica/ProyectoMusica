@@ -1,21 +1,20 @@
 @echo off
-setlocal enabledelayedexpansion
+setlocal
 cd /d "%~dp0"
 title MusicSync Studio Pro
 
-:: Intentar ejecutar con python
-python app_gui.py %*
-if %ERRORLEVEL% EQU 0 goto :fin
+:: 1. Si existe el ejecutable independiente compilado, abrirlo directamente
+if exist "dist\MusicSync_Studio\MusicSync_Studio.exe" (
+    start "" "dist\MusicSync_Studio\MusicSync_Studio.exe"
+    exit
+)
 
-:: Si python falla, intentar con py
-py -3 app_gui.py %*
-if %ERRORLEVEL% EQU 0 goto :fin
+:: 2. Buscar ruta directa de Python en AppData
+if exist "%LOCALAPPDATA%\Programs\Python\Python313\python.exe" (
+    start "" "%LOCALAPPDATA%\Programs\Python\Python313\python.exe" app_gui.py
+    exit
+)
 
-echo.
-echo [!] No se pudo iniciar MusicSync Studio Pro.
-echo Asegurate de tener Python 3 instalado en tu computadora.
-echo.
-pause
-
-:fin
-exit /b 0
+:: 3. Intentar con python del sistema
+start "" python app_gui.py
+exit
